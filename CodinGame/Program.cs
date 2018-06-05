@@ -103,13 +103,17 @@ class Game
             switch (currentTarget)
             {
                 case "START_POS":
-                    Console.WriteLine("GOTO DIAGNOSIS");
+                    Console.WriteLine("GOTO SAMPLES");
                     break;
-                case "DIAGNOSIS":
+                case "SAMPLES":
                     var currentLoad = samples.Where(i => i.OwnByPlayer).Select(i => i.TotalCost).Sum();
                     if (currentLoad < 10)
                     {
-                        var maxSample = samples.Where(i => i.InCloud).Where(i => i.TotalCost < 10 - currentLoad).OrderByDescending(i => i.TotalCost).FirstOrDefault();
+                        var maxSample = samples.Where(i => i.InCloud)
+                            .Where(i => i.TotalCost < 10 - currentLoad)
+                            .OrderByDescending(i => i.Rank)
+                            .ThenBy(i => i.TotalCost)
+                            .FirstOrDefault();
                         if (maxSample != null)
                         {
                             Console.Error.WriteLine($"Got sample: {maxSample.CostA} {maxSample.CostB} {maxSample.CostC} {maxSample.CostD} {maxSample.CostE} ");
@@ -117,7 +121,10 @@ class Game
                             break;
                         }
                     }
-                    Console.WriteLine("GOTO MOLECULES");
+                    Console.WriteLine("GOTO DIAGNOSIS");
+                    break;
+                case "DIAGNOSIS":
+                    //TODO
                     break;
                 case "MOLECULES":
                     var ourPlayerSamples = samples.Where(i => i.OwnByPlayer);
@@ -148,7 +155,8 @@ class Game
                     }
 
                     Console.WriteLine("GOTO LABORATORY");
-                    break;
+                    break;
+
                 case "LABORATORY":
                     if (samples.Any(i => i.OwnByPlayer))
                     {
@@ -156,8 +164,9 @@ class Game
                         Console.WriteLine($"CONNECT {samples.First(i => i.OwnByPlayer).SampleId}");
                         break;
                     }
-                    Console.WriteLine("GOTO DIAGNOSIS");
-                    break;
+                    Console.WriteLine("GOTO SAMPLES");
+                    break;
+
             }
             
             Console.Error.WriteLine($"Current pos {currentTarget}");
