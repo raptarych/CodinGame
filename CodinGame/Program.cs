@@ -54,6 +54,7 @@ class Sample
     public int CostE { get; set; }
     public int TotalCost => CostA + CostB + CostC + CostD + CostE;
     public bool OwnByPlayer => CarriedBy == 0;
+    public bool Diagnozed => CostA > -1 && CostB > -1 && CostC > -1 && CostD > -1 && CostE > -1;
     public bool OwnByOpponent => CarriedBy == 1;
     public bool InCloud => CarriedBy == -1;
 }
@@ -100,31 +101,57 @@ class Game
             // To debug: Console.Error.WriteLine("Debug messages...");
 
             var currentTarget = ourPlayer.Target;
+            var ownSamples = samples.Where(i => i.OwnByPlayer).ToList();
+            var currentLoad = ownSamples.Select(i => i.TotalCost).Sum();
+
+            var samplesInfo = samples.Select(sample => $"{sample.SampleId}: rank {sample.SampleId}, {sample.CostA} {sample.CostB} {sample.CostC} {sample.CostD} {sample.CostE}");
+            Console.Error.Write($"Game config:\n{string.Join("\n", samplesInfo)}\n");
+
             switch (currentTarget)
             {
                 case "START_POS":
                     Console.WriteLine("GOTO SAMPLES");
                     break;
                 case "SAMPLES":
-                    var currentLoad = samples.Where(i => i.OwnByPlayer).Select(i => i.TotalCost).Sum();
-                    if (currentLoad < 10)
+                    Console.Error.WriteLine($"Current load: {currentLoad}");
+                    if (ownSamples.Count() < 2)
                     {
-                        var maxSample = samples.Where(i => i.InCloud)
-                            .Where(i => i.TotalCost < 10 - currentLoad)
-                            .OrderByDescending(i => i.Rank)
-                            .ThenBy(i => i.TotalCost)
-                            .FirstOrDefault();
-                        if (maxSample != null)
-                        {
-                            Console.Error.WriteLine($"Got sample: {maxSample.CostA} {maxSample.CostB} {maxSample.CostC} {maxSample.CostD} {maxSample.CostE} ");
-                            Console.WriteLine($"CONNECT {maxSample.SampleId}");
-                            break;
-                        }
+                        Console.WriteLine("CONNECT 3");
+                        break;
+                    } else if (ownSamples.Count() < 3)
+                    {
+                        Console.WriteLine("CONNECT 2");
+                        break;
                     }
                     Console.WriteLine("GOTO DIAGNOSIS");
                     break;
                 case "DIAGNOSIS":
-                    //TODO
+                    Console.Error.WriteLine($"Got samples: {ownSamples.Count()}");
+
+                    var unDiagnozedSample = ownSamples.FirstOrDefault(i => !i.Diagnozed);
+
+                    if (unDiagnozedSample != null)
+                    {
+                        Console.WriteLine($"CONNECT {unDiagnozedSample.SampleId}");
+                        break;
+                    }
+
+                    var tooLarge = ownSamples.FirstOrDefault(i => i.TotalCost > 10);
+
+                    if (tooLarge != null)
+                    {
+                        Console.WriteLine($"CONNECT {tooLarge.SampleId}");
+                        break;
+                    }
+
+                    if (ownSamples.Count > 1)
+                    {
+                        var minHealth = ownSamples.OrderBy(i => i.Health).First();
+                        Console.WriteLine($"CONNECT {minHealth.SampleId}");
+                        break;
+                    }
+                    
+                    Console.WriteLine("GOTO MOLECULES");
                     break;
                 case "MOLECULES":
                     var ourPlayerSamples = samples.Where(i => i.OwnByPlayer);
