@@ -27,6 +27,7 @@ class Player
     public int StorageC { get; set; }
     public int StorageD { get; set; }
     public int StorageE { get; set; }
+    public int CurrentLoad => StorageA + StorageB + StorageC + StorageD + StorageE;
 }
 
 class Sample
@@ -57,6 +58,39 @@ class Sample
     public bool Diagnozed => CostA > -1 && CostB > -1 && CostC > -1 && CostD > -1 && CostE > -1;
     public bool OwnByOpponent => CarriedBy == 1;
     public bool InCloud => CarriedBy == -1;
+
+    public bool CanBeResearched
+    {
+        get
+        {
+            var enoughA = CurrentGameState.Player.StorageA >= CostA;
+            var enoughB = CurrentGameState.Player.StorageB >= CostB;
+            var enoughC = CurrentGameState.Player.StorageC >= CostC;
+            var enoughD = CurrentGameState.Player.StorageD >= CostD;
+            var enoughE = CurrentGameState.Player.StorageE >= CostE;
+            return enoughA && enoughB && enoughC && enoughD && enoughE;
+        }
+    }
+
+    public bool ShouldRequestMolecules()
+    {
+        var enoughA = CostA - CurrentGameState.Player.StorageA > CurrentGameState.AvailableMolecules["A"];
+        var enoughB = CostB - CurrentGameState.Player.StorageA > CurrentGameState.AvailableMolecules["B"];
+        var enoughC = CostC - CurrentGameState.Player.StorageA > CurrentGameState.AvailableMolecules["C"];
+        var enoughD = CostD - CurrentGameState.Player.StorageA > CurrentGameState.AvailableMolecules["D"];
+        var enoughE = CostE - CurrentGameState.Player.StorageA > CurrentGameState.AvailableMolecules["E"];
+        return enoughA && enoughB && enoughC && enoughD && enoughE;
+    }
+}
+
+static class CurrentGameState
+{
+    public static Dictionary<string, int> AvailableMolecules { get; set; }
+    public static List<Sample> Samples { get; set; }
+    public static List<Sample> PlayersSamples => Samples.Where(i => i.OwnByPlayer).ToList();
+    public static List<Sample> OpponentSamples => Samples.Where(i => i.OwnByOpponent).ToList();
+    public static Player Player { get; set; }
+    public static Player Opponent { get; set; }
 }
 
 class Game
@@ -64,8 +98,6 @@ class Game
     static void Main(string[] args)
     {
         string[] inputs;
-        Player ourPlayer;
-        Player opponentPlayer;
         int projectCount = int.Parse(Console.ReadLine());
         for (int i = 0; i < projectCount; i++)
         {
@@ -81,54 +113,35 @@ class Game
         // game loop
         while (true)
         {
-            ourPlayer = new Player(Console.ReadLine()?.Split(' '));
-            opponentPlayer = new Player(Console.ReadLine()?.Split(' '));
-            inputs = Console.ReadLine().Split(' ');
-            /*int availableA = int.Parse(inputs[0]);
-            int availableB = int.Parse(inputs[1]);
-            int availableC = int.Parse(inputs[2]);
-            int availableD = int.Parse(inputs[3]);
-            int availableE = int.Parse(inputs[4]);*/
-            int sampleCount = int.Parse(Console.ReadLine());
-            var samples = new List<Sample>();
-            for (int i = 0; i < sampleCount; i++)
-            {
-                inputs = Console.ReadLine().Split(' ');
-                samples.Add(new Sample(inputs));
-            }
+            ReadGameState();
 
             // Write an action using Console.WriteLine()
             // To debug: Console.Error.WriteLine("Debug messages...");
+            
+            var currentLoad = CurrentGameState.Player.CurrentLoad;
 
-            var currentTarget = ourPlayer.Target;
-            var ownSamples = samples.Where(i => i.OwnByPlayer).ToList();
-            var currentLoad = ownSamples.Select(i => i.TotalCost).Sum();
+            DebugInfo(currentLoad);
+            //Console.Error.Write($"Game config:\n{string.Join("\n", samplesInfo)}\n");
 
-            var samplesInfo = samples.Select(sample => $"{sample.SampleId}: rank {sample.SampleId}, {sample.CostA} {sample.CostB} {sample.CostC} {sample.CostD} {sample.CostE}");
-            Console.Error.Write($"Game config:\n{string.Join("\n", samplesInfo)}\n");
-
-            switch (currentTarget)
+            switch (CurrentGameState.Player.Target)
             {
                 case "START_POS":
                     Console.WriteLine("GOTO SAMPLES");
                     break;
                 case "SAMPLES":
-                    Console.Error.WriteLine($"Current load: {currentLoad}");
-                    if (ownSamples.Count() < 2)
-                    {
-                        Console.WriteLine("CONNECT 3");
-                        break;
-                    } else if (ownSamples.Count() < 3)
+                    if (CurrentGameState.PlayersSamples.Count() < 2)
                     {
                         Console.WriteLine("CONNECT 2");
+                        break;
+                    } else if (CurrentGameState.PlayersSamples.Count() < 3)
+                    {
+                        Console.WriteLine("CONNECT 1");
                         break;
                     }
                     Console.WriteLine("GOTO DIAGNOSIS");
                     break;
                 case "DIAGNOSIS":
-                    Console.Error.WriteLine($"Got samples: {ownSamples.Count()}");
-
-                    var unDiagnozedSample = ownSamples.FirstOrDefault(i => !i.Diagnozed);
+                    var unDiagnozedSample = CurrentGameState.PlayersSamples.FirstOrDefault(i => !i.Diagnozed);
 
                     if (unDiagnozedSample != null)
                     {
@@ -136,7 +149,7 @@ class Game
                         break;
                     }
 
-                    var tooLarge = ownSamples.FirstOrDefault(i => i.TotalCost > 10);
+                    var tooLarge = CurrentGameState.PlayersSamples.FirstOrDefault(i => i.TotalCost > 10);
 
                     if (tooLarge != null)
                     {
@@ -144,38 +157,49 @@ class Game
                         break;
                     }
 
-                    if (ownSamples.Count > 1)
+                    var notEnoughMolecules = CurrentGameState.PlayersSamples.FirstOrDefault(i =>
+                        i.CostA > CurrentGameState.AvailableMolecules["A"] || i.CostB > CurrentGameState.AvailableMolecules["B"] || i.CostC > CurrentGameState.AvailableMolecules["C"] || i.CostD > CurrentGameState.AvailableMolecules["D"] ||
+                        i.CostE > CurrentGameState.AvailableMolecules["E"]);
+                    if (notEnoughMolecules != null)
+                    {
+                        Console.WriteLine($"CONNECT {notEnoughMolecules.SampleId}");
+                        break;
+                    }
+
+                    /*if (ownSamples.Count > 1)
                     {
                         var minHealth = ownSamples.OrderBy(i => i.Health).First();
                         Console.WriteLine($"CONNECT {minHealth.SampleId}");
                         break;
-                    }
+                    }*/
                     
                     Console.WriteLine("GOTO MOLECULES");
                     break;
                 case "MOLECULES":
-                    var ourPlayerSamples = samples.Where(i => i.OwnByPlayer);
-                    if (ourPlayerSamples.Select(i => i.CostA).Sum() - ourPlayer.StorageA > 0)
+                    var ourPlayerSamples = CurrentGameState.PlayersSamples.Where(sample => sample.ShouldRequestMolecules() && !sample.CanBeResearched);
+
+                    var samplesCost = 0;
+                    if (ourPlayerSamples.Select(i => i.CostA).Sum() - CurrentGameState.Player.StorageA > 0)
                     {
                         Console.WriteLine("CONNECT A");
                         break;
                     }
-                    if (ourPlayerSamples.Select(i => i.CostB).Sum() - ourPlayer.StorageB > 0)
+                    if (ourPlayerSamples.Select(i => i.CostB).Sum() - CurrentGameState.Player.StorageB > 0)
                     {
                         Console.WriteLine("CONNECT B");
                         break;
                     }
-                    if (ourPlayerSamples.Select(i => i.CostC).Sum() - ourPlayer.StorageC > 0)
+                    if (ourPlayerSamples.Select(i => i.CostC).Sum() - CurrentGameState.Player.StorageC > 0)
                     {
                         Console.WriteLine("CONNECT C");
                         break;
                     }
-                    if (ourPlayerSamples.Select(i => i.CostD).Sum() - ourPlayer.StorageD > 0)
+                    if (ourPlayerSamples.Select(i => i.CostD).Sum() - CurrentGameState.Player.StorageD > 0)
                     {
                         Console.WriteLine("CONNECT D");
                         break;
                     }
-                    if (ourPlayerSamples.Select(i => i.CostE).Sum() - ourPlayer.StorageE > 0)
+                    if (ourPlayerSamples.Select(i => i.CostE).Sum() - CurrentGameState.Player.StorageE > 0)
                     {
                         Console.WriteLine("CONNECT E");
                         break;
@@ -185,10 +209,10 @@ class Game
                     break;
 
                 case "LABORATORY":
-                    if (samples.Any(i => i.OwnByPlayer))
+                    if (CurrentGameState.Samples.Any(i => i.OwnByPlayer))
                     {
-                        Console.Error.WriteLine($"Player got: {ourPlayer.StorageA} {ourPlayer.StorageB} {ourPlayer.StorageC} {ourPlayer.StorageD} {ourPlayer.StorageE}");
-                        Console.WriteLine($"CONNECT {samples.First(i => i.OwnByPlayer).SampleId}");
+                        //Console.Error.WriteLine($"Player got: {ourPlayer.StorageA} {ourPlayer.StorageB} {ourPlayer.StorageC} {ourPlayer.StorageD} {ourPlayer.StorageE}");
+                        Console.WriteLine($"CONNECT {CurrentGameState.Samples.First(i => i.OwnByPlayer).SampleId}");
                         break;
                     }
                     Console.WriteLine("GOTO SAMPLES");
@@ -196,7 +220,45 @@ class Game
 
             }
             
-            Console.Error.WriteLine($"Current pos {currentTarget}");
+            Console.Error.WriteLine($"Current pos {CurrentGameState.Player.Target}");
+        }
+    }
+
+    private static void DebugInfo(int currentLoad)
+    {
+        var opponentSamplesInfo = CurrentGameState.OpponentSamples.Where(i => i.Diagnozed).Select(sample =>
+            $"{sample.SampleId}: rank {sample.Rank}, {sample.CostA} {sample.CostB} {sample.CostC} {sample.CostD} {sample.CostE}");
+        var playerSamplesInfo = CurrentGameState.PlayersSamples.Where(i => i.Diagnozed).Select(sample =>
+            $"{sample.SampleId}: rank {sample.Rank}, {sample.CostA} {sample.CostB} {sample.CostC} {sample.CostD} {sample.CostE}");
+        Console.Error.WriteLine(
+            $"Available molecules:\n{string.Join("\n", CurrentGameState.AvailableMolecules.Select(i => $"{i.Key}: {i.Value}"))}");
+        Console.Error.WriteLine($"Opponent got:\n{string.Join("\n", opponentSamplesInfo)}");
+        Console.Error.WriteLine($"Player got:\n{string.Join("\n", playerSamplesInfo)}");
+        Console.Error.WriteLine(
+            $"Got samples: {CurrentGameState.PlayersSamples.Count(i => i.Diagnozed)} (+{CurrentGameState.PlayersSamples.Count(i => !i.Diagnozed)} undiaznozed)");
+        Console.Error.WriteLine($"Current molecular load: {currentLoad}");
+    }
+
+    private static void ReadGameState()
+    {
+        string[] inputs;
+        CurrentGameState.Player = new Player(Console.ReadLine()?.Split(' '));
+        CurrentGameState.Opponent = new Player(Console.ReadLine()?.Split(' '));
+        inputs = Console.ReadLine().Split(' ');
+        CurrentGameState.AvailableMolecules = new Dictionary<string, int>
+        {
+            ["A"] = int.Parse(inputs[0]),
+            ["B"] = int.Parse(inputs[1]),
+            ["C"] = int.Parse(inputs[2]),
+            ["D"] = int.Parse(inputs[3]),
+            ["E"] = int.Parse(inputs[4])
+        };
+        int sampleCount = int.Parse(Console.ReadLine());
+        CurrentGameState.Samples = new List<Sample>();
+        for (int i = 0; i < sampleCount; i++)
+        {
+            inputs = Console.ReadLine().Split(' ');
+            CurrentGameState.Samples.Add(new Sample(inputs));
         }
     }
 }
