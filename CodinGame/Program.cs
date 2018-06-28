@@ -13,21 +13,25 @@ class Player
         Target = data[0];
         Eta = int.Parse(data[1]);
         Score = int.Parse(data[2]);
-        StorageA = int.Parse(data[3]);
-        StorageB = int.Parse(data[4]);
-        StorageC = int.Parse(data[5]);
-        StorageD = int.Parse(data[6]);
-        StorageE = int.Parse(data[7]);
+        Storage = new Dictionary<char, int>
+        {
+            ['A'] = int.Parse(data[3]),
+            ['B'] = int.Parse(data[4]),
+            ['C'] = int.Parse(data[5]),
+            ['D'] = int.Parse(data[6]),
+            ['E'] = int.Parse(data[7])
+        };
     }
     public string Target { get; set; }
     public int Eta { get; set; }
     public int Score { get; set; }
+    public Dictionary<char, int> Storage { get; set; }
     public int StorageA { get; set; }
     public int StorageB { get; set; }
     public int StorageC { get; set; }
     public int StorageD { get; set; }
     public int StorageE { get; set; }
-    public int CurrentLoad => StorageA + StorageB + StorageC + StorageD + StorageE;
+    public int CurrentLoad => Storage.Values.Sum();
 }
 
 class Sample
@@ -38,24 +42,23 @@ class Sample
         CarriedBy = int.Parse(inputs[1]);
         Rank = int.Parse(inputs[2]);
         Health = int.Parse(inputs[4]);
-        CostA = int.Parse(inputs[5]);
-        CostB = int.Parse(inputs[6]);
-        CostC = int.Parse(inputs[7]);
-        CostD = int.Parse(inputs[8]);
-        CostE = int.Parse(inputs[9]);
+        Costs = new Dictionary<char, int>
+        {
+            ['A'] = int.Parse(inputs[5]),
+            ['B'] = int.Parse(inputs[6]),
+            ['C'] = int.Parse(inputs[7]),
+            ['D'] = int.Parse(inputs[8]),
+            ['E'] = int.Parse(inputs[9])
+        };
     }
     public int SampleId { get; set; }
     public int CarriedBy { get; set; }
     public int Health { get; set; }
     public int Rank { get; set; }
-    public int CostA { get; set; }
-    public int CostB { get; set; }
-    public int CostC { get; set; }
-    public int CostD { get; set; }
-    public int CostE { get; set; }
-    public int TotalCost => CostA + CostB + CostC + CostD + CostE;
+    public Dictionary<char, int> Costs { get; set; }
+    public int TotalCost => Costs.Values.Sum();
     public bool OwnByPlayer => CarriedBy == 0;
-    public bool Diagnozed => CostA > -1 && CostB > -1 && CostC > -1 && CostD > -1 && CostE > -1;
+    public bool Diagnozed => Costs.Values.All(i => i > -1);
     public bool OwnByOpponent => CarriedBy == 1;
     public bool InCloud => CarriedBy == -1;
 
@@ -63,29 +66,19 @@ class Sample
     {
         get
         {
-            var enoughA = CurrentGameState.Player.StorageA >= CostA;
-            var enoughB = CurrentGameState.Player.StorageB >= CostB;
-            var enoughC = CurrentGameState.Player.StorageC >= CostC;
-            var enoughD = CurrentGameState.Player.StorageD >= CostD;
-            var enoughE = CurrentGameState.Player.StorageE >= CostE;
-            return enoughA && enoughB && enoughC && enoughD && enoughE;
+            return Costs.All(cost => CurrentGameState.Player.Storage[cost.Key] >= cost.Value);
         }
     }
 
     public bool ShouldRequestMolecules()
     {
-        var enoughA = CostA - CurrentGameState.Player.StorageA > CurrentGameState.AvailableMolecules["A"];
-        var enoughB = CostB - CurrentGameState.Player.StorageA > CurrentGameState.AvailableMolecules["B"];
-        var enoughC = CostC - CurrentGameState.Player.StorageA > CurrentGameState.AvailableMolecules["C"];
-        var enoughD = CostD - CurrentGameState.Player.StorageA > CurrentGameState.AvailableMolecules["D"];
-        var enoughE = CostE - CurrentGameState.Player.StorageA > CurrentGameState.AvailableMolecules["E"];
-        return enoughA && enoughB && enoughC && enoughD && enoughE;
+        return Costs.All(cost => cost.Value - CurrentGameState.Player.Storage[cost.Key] > CurrentGameState.AvailableMolecules[cost.Key]);
     }
 }
 
 static class CurrentGameState
 {
-    public static Dictionary<string, int> AvailableMolecules { get; set; }
+    public static Dictionary<char, int> AvailableMolecules { get; set; }
     public static List<Sample> Samples { get; set; }
     public static List<Sample> PlayersSamples => Samples.Where(i => i.OwnByPlayer).ToList();
     public static List<Sample> OpponentSamples => Samples.Where(i => i.OwnByOpponent).ToList();
@@ -157,9 +150,8 @@ class Game
                         break;
                     }
 
-                    var notEnoughMolecules = CurrentGameState.PlayersSamples.FirstOrDefault(i =>
-                        i.CostA > CurrentGameState.AvailableMolecules["A"] || i.CostB > CurrentGameState.AvailableMolecules["B"] || i.CostC > CurrentGameState.AvailableMolecules["C"] || i.CostD > CurrentGameState.AvailableMolecules["D"] ||
-                        i.CostE > CurrentGameState.AvailableMolecules["E"]);
+                    var notEnoughMolecules = CurrentGameState.PlayersSamples
+                        .FirstOrDefault(i => i.Costs.All(cost => cost.Value > CurrentGameState.AvailableMolecules[cost.Key]));
                     if (notEnoughMolecules != null)
                     {
                         Console.WriteLine($"CONNECT {notEnoughMolecules.SampleId}");
@@ -179,7 +171,8 @@ class Game
                     var ourPlayerSamples = CurrentGameState.PlayersSamples.Where(sample => sample.ShouldRequestMolecules() && !sample.CanBeResearched);
 
                     var samplesCost = 0;
-                    if (ourPlayerSamples.Select(i => i.CostA).Sum() - CurrentGameState.Player.StorageA > 0)
+                    //TODO
+                    /*if (ourPlayerSamples.Select(i => i.CostA).Sum() - CurrentGameState.Player.StorageA > 0)
                     {
                         Console.WriteLine("CONNECT A");
                         break;
@@ -203,7 +196,7 @@ class Game
                     {
                         Console.WriteLine("CONNECT E");
                         break;
-                    }
+                    }*/
 
                     Console.WriteLine("GOTO LABORATORY");
                     break;
@@ -211,7 +204,6 @@ class Game
                 case "LABORATORY":
                     if (CurrentGameState.Samples.Any(i => i.OwnByPlayer))
                     {
-                        //Console.Error.WriteLine($"Player got: {ourPlayer.StorageA} {ourPlayer.StorageB} {ourPlayer.StorageC} {ourPlayer.StorageD} {ourPlayer.StorageE}");
                         Console.WriteLine($"CONNECT {CurrentGameState.Samples.First(i => i.OwnByPlayer).SampleId}");
                         break;
                     }
@@ -227,9 +219,9 @@ class Game
     private static void DebugInfo(int currentLoad)
     {
         var opponentSamplesInfo = CurrentGameState.OpponentSamples.Where(i => i.Diagnozed).Select(sample =>
-            $"{sample.SampleId}: rank {sample.Rank}, {sample.CostA} {sample.CostB} {sample.CostC} {sample.CostD} {sample.CostE}");
+            $"{sample.SampleId}: rank {sample.Rank}, {string.Join(" ", sample.Costs.Values)}");
         var playerSamplesInfo = CurrentGameState.PlayersSamples.Where(i => i.Diagnozed).Select(sample =>
-            $"{sample.SampleId}: rank {sample.Rank}, {sample.CostA} {sample.CostB} {sample.CostC} {sample.CostD} {sample.CostE}");
+            $"{sample.SampleId}: rank {sample.Rank}, {string.Join(" ", sample.Costs.Values)}");
         Console.Error.WriteLine(
             $"Available molecules:\n{string.Join("\n", CurrentGameState.AvailableMolecules.Select(i => $"{i.Key}: {i.Value}"))}");
         Console.Error.WriteLine($"Opponent got:\n{string.Join("\n", opponentSamplesInfo)}");
@@ -245,13 +237,13 @@ class Game
         CurrentGameState.Player = new Player(Console.ReadLine()?.Split(' '));
         CurrentGameState.Opponent = new Player(Console.ReadLine()?.Split(' '));
         inputs = Console.ReadLine().Split(' ');
-        CurrentGameState.AvailableMolecules = new Dictionary<string, int>
+        CurrentGameState.AvailableMolecules = new Dictionary<char, int>
         {
-            ["A"] = int.Parse(inputs[0]),
-            ["B"] = int.Parse(inputs[1]),
-            ["C"] = int.Parse(inputs[2]),
-            ["D"] = int.Parse(inputs[3]),
-            ["E"] = int.Parse(inputs[4])
+            ['A'] = int.Parse(inputs[0]),
+            ['B'] = int.Parse(inputs[1]),
+            ['C'] = int.Parse(inputs[2]),
+            ['D'] = int.Parse(inputs[3]),
+            ['E'] = int.Parse(inputs[4])
         };
         int sampleCount = int.Parse(Console.ReadLine());
         CurrentGameState.Samples = new List<Sample>();
